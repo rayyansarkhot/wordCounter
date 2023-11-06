@@ -1,17 +1,46 @@
 #include <stdio.h>
+#include <sys/stat.h>
+
+void findTextFiles(int argc, char *argv[]) {
+
+    struct stat fileStat;
+
+    // While there are files to be checked
+    while(argc > 0){
+
+        // Check if current file is a txt file
+        if (stat(argv[1], &fileStat) == 0) {
+            
+            if (S_ISDIR(fileStat.st_mode)) {
+                printf("%s is a directory.\n", argv[1]);
+            } else {
+                printf("%s is not a directory.\n", argv[1]);
+            }
+
+        } else {
+            perror("stat");
+            
+        }
+
+        break;
+        
+    }
+
+}
 
 int main(int argc, char *argv[]) {
-    // Check if there are command-line arguments
-    if (argc < 2) {
-        printf("No command-line arguments provided.\n");
-    } else {
-        printf("Number of command-line arguments: %d\n", argc - 1);
 
-        // Access and print each command-line argument
-        for (int i = 1; i < argc; i++) {
-            printf("Argument %d: %s\n", i, argv[i]);
-        }
+    // Checks whether user provided any files on runtime
+    if (argc < 2) {
+        printf("No files provided.\n");
+    } else {
+
+        // If there exists a range of files, it is sent to a method for 
+        // individual txt file checking
+        findTextFiles(argc, argv);
+        
     }
 
     return 0;
 }
+
