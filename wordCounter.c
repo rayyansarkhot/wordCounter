@@ -1,32 +1,69 @@
+#include "bst.h"
 #include <stdio.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
-// #include <vcruntime.h>
+#include <limits.h>
+//#include <vcruntime.h>
 
 struct stat fileStat;
 struct dirent *currFile;
 
-void fileReader(char *path) {
+void processWord(char *word, Node **root);
 
-    printf("%s is a file.\n", path);
-    
+void fileReader(char *path, Node **root) {
+    // Open the file
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    char word[256];  // Buffer to hold each word, adjust size as needed
+    while (fscanf(file, "%255s", word) == 1) {
+        // Process each word
+        char processedWord[256] = {0};
+        int j = 0;
+        
+        // Removing leading non-letter characters
+        int i = 0;
+        while(word[i] && !isalpha(word[i])) i++;
+
+        // Process the rest of the word
+        for (; word[i]; i++) {
+            if (isalpha(word[i]) || word[i] == '\'' || (word[i] == '-' && isalpha(word[i-1]) && isalpha(word[i+1]))) {
+                processedWord[j++] = word[i];
+            }
+        }
+        processedWord[j] = '\0'; // Null-terminate the processed word
+
+        // Handle the processed word
+        processWord(processedWord, root);
+    }
+
+    fclose(file);
+}
+void processWord(char *word, Node **root) {
+    if (word[0] != '\0') { // Ensure the word is not empty
+        *root = insertNode(*root, word);
+    }
 }
 
 void recursiveFind(char *dPath) {
     
     // Opens current directory
-    DIR *dir;
+    DIR *dir=NULL;
     dir = opendir(dPath);
     
     if (dir == NULL) {    
         perror("Error opening directory");
+        return;
     } else {
     
         // Reads a file from directory
-        currFile = readdir(dir); 
-        while(currFile != NULL) {
+        //currFile = readdir(dir); 
+        while((currFile = readdir(dir))!=NULL) {
 
             // Checks if directory name is to deeper or higher and ignores this directory entry
             if (strcmp(currFile->d_name, ".") == 0 || strcmp(currFile->d_name, "..") == 0) {
@@ -35,7 +72,7 @@ void recursiveFind(char *dPath) {
             }
 
             // Constructs full directory path
-            char path[PATH_MAX];
+            char path[PATH_MAX]; 
             snprintf(path, sizeof(path), "%s/%s", dPath, currFile->d_name);
 
             // Check if current file is a txt file
@@ -48,9 +85,12 @@ void recursiveFind(char *dPath) {
 
                 } else {
                     // printf("%s is not a directory.\n", currFile->d_name);
-                    fileReader(path);
+                    //fileReader(path);
+                     if (strstr(currFile->d_name, ".txt") != NULL) {
+                        fileReader(path);
+                    }
                 }
-                currFile = readdir(dir);
+                //currFile = readdir(dir);
 
             } else {
                 perror("stat");
@@ -60,12 +100,13 @@ void recursiveFind(char *dPath) {
 
     }
     
-    closedir(dir);
+    if (closedir(dir) < 0) {
+        perror("Error closing directory");
 
 }
-
+}
 void findTextFiles(int argc, char *argv[]) {
-
+    --argc;
     // While there are files to be checked
     while(argc > 0){
 
@@ -80,7 +121,7 @@ void findTextFiles(int argc, char *argv[]) {
             } else {
                 printf("%s is a file.\n", argv[argc]);
             }
-
+ 
         } else {
             perror("stat");
             
@@ -93,7 +134,7 @@ void findTextFiles(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-
+     Node *root = NULL;
     // Checks whether user provided any files on runtime
     if (argc < 2) {
         printf("No files provided.\n");
@@ -104,7 +145,8 @@ int main(int argc, char *argv[]) {
         findTextFiles(argc, argv);
         
     }
-
+    inOrderTraversal(root);
+    freeBST(root);
     return 0;
 }
 
