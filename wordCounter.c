@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <ctype.h>
 //#include <vcruntime.h>
 
 struct stat fileStat;
@@ -72,7 +73,7 @@ void recursiveFind(char *dPath) {
             }
 
             // Constructs full directory path
-            char path[PATH_MAX]; 
+            char path[4096]; 
             snprintf(path, sizeof(path), "%s/%s", dPath, currFile->d_name);
 
             // Check if current file is a txt file
