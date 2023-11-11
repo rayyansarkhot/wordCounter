@@ -3,7 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-
+char *my_strdup(const char *s) {
+    char *copy = malloc(strlen(s) + 1);
+    if (copy != NULL) {
+        strcpy(copy, s);
+    }
+    return copy;
+}
 Node *createNode(const char *word) {
     Node *newNode = (Node *)malloc(sizeof(Node));
     if (newNode == NULL) {
@@ -11,7 +17,7 @@ Node *createNode(const char *word) {
         exit(EXIT_FAILURE);
     }
 
-    newNode->word = strdup(word);
+    newNode->word = my_strdup(word);
     if (newNode->word == NULL) {
         perror("Unable to allocate memory for the word");
         free(newNode);
@@ -40,13 +46,39 @@ Node *insertNode(Node *root, const char *word) {
     // Return the unchanged node pointer
     return root;
 }
-void inOrderTraversal(Node *root) {
+
+void inOrderCollect(Node *root, WordCount *wordCounts, int *index) {
     if (root != NULL) {
-        inOrderTraversal(root->left);
-        printf("%s: %d\n", root->word, root->count);
-        inOrderTraversal(root->right);
+        inOrderCollect(root->left, wordCounts, index);
+        wordCounts[*index].word = my_strdup(root->word); // Duplicate the word
+        wordCounts[*index].count = root->count;
+        (*index)++;
+        inOrderCollect(root->right, wordCounts, index);
     }
 }
+int countNodes(Node *root) {
+    if (root == NULL) {
+        return 0;
+    }
+    return 1 + countNodes(root->left) + countNodes(root->right);
+}
+
+int compareWordCounts(const void *a, const void *b) {
+    const WordCount *wc1 = (const WordCount *)a;
+    const WordCount *wc2 = (const WordCount *)b;
+
+    // Primary sort by count in descending order
+    if (wc1->count != wc2->count) {
+        return wc2->count - wc1->count;
+    }
+
+    // Secondary sort lexicographically
+    return strcmp(wc1->word, wc2->word);
+}
+
+
+
+
 void freeBST(Node *root) {
     if (root != NULL) {
         freeBST(root->left);

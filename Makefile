@@ -2,15 +2,20 @@ CC = gcc
 CFLAGS = -std=c99 -Wall -fsanitize=address,undefined
 
 SRCS = wordCounter.c bst.c
+OBJS = $(SRCS:.c=.o)
 EXE = wordCounter
 
 all: $(EXE)
 
-$(EXE): $(SRCS:.c=.o)
-	$(CC) -o $(EXE) $(SRCS:.c=.o) $(CFLAGS)
+$(EXE): $(OBJS)
+	$(CC) $(CFLAGS) -o $(EXE) $(OBJS)
+
+# Assuming bst.h is a dependency for your source files
+wordCounter.o: wordCounter.c bst.h
+bst.o: bst.c bst.h
 
 %.o: %.c
-	$(CC) -c $< $(CFLAGS)
+	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f $(EXE) $(SRCS:.c=.o)
+	rm -f $(EXE) $(OBJS)
