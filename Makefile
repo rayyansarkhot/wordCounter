@@ -10,7 +10,7 @@ all: $(EXE)
 $(EXE): $(OBJS)
 	$(CC) $(CFLAGS) -o $(EXE) $(OBJS)
 
-# Assuming bst.h is a dependency for your source files
+
 wordCounter.o: wordCounter.c bst.h
 bst.o: bst.c bst.h
 

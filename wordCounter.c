@@ -5,97 +5,108 @@
 #include <dirent.h>
 #include <limits.h>
 #include <ctype.h>
-#include <stdlib.h> //can't believe I forgot this 
-//#include <vcruntime.h>
-
-struct stat fileStat;
-struct dirent *currFile;
+#include <stdlib.h>
+#include <fcntl.h>      // For open()
+#include <unistd.h>     // For read() and close()
 
 void processWord(char *word, Node **root);
 
 void fileReader(char *path, Node **root) {
-    FILE *file = fopen(path, "r");
-    if (file == NULL) {
+    int fd = open(path, O_RDONLY);
+    if (fd == -1) {
         perror("Error opening file");
         return;
     }
 
     int bufferSize = 256;
+    char *buffer = malloc(bufferSize);
     char *processedWord = malloc(bufferSize);
-    if (processedWord == NULL) {
-        perror("Unable to allocate memory for processedWord");
-        fclose(file);
+    if (buffer == NULL || processedWord == NULL) {
+        perror("Unable to allocate memory");
+        if (buffer) free(buffer);
+        if (processedWord) free(processedWord);
+        close(fd);
         return;
     }
 
-    int j = 0;
-    int c;
+    int bytesRead, j = 0;
+    while ((bytesRead = read(fd, buffer, bufferSize - 1)) > 0) {
+        for (int i = 0; i < bytesRead; i++) {
+            char c = buffer[i];
 
-    while ((c = fgetc(file)) != EOF) {
-        // Resize processedWord if necessary
-        if (j >= bufferSize - 1) {
-            bufferSize *= 2;
-            char *newBuffer = realloc(processedWord, bufferSize);
-            if (newBuffer == NULL) {
-                perror("Unable to allocate memory for processedWord");
-                free(processedWord);
-                fclose(file);
-                return;
+            if (j >= bufferSize - 1) {
+                bufferSize *= 2;
+                char *newBuffer = realloc(processedWord, bufferSize);
+                if (newBuffer == NULL) {
+                    perror("Unable to allocate memory for processedWord");
+                    free(buffer);
+                    free(processedWord);
+                    close(fd);
+                    return;
+                }
+                processedWord = newBuffer;
             }
-            processedWord = newBuffer;
-        }
 
-        // Check for word termination
-        if (isalpha(c) || c == '\'' || (c == '-' && j > 0 && isalpha(processedWord[j-1]))) {
-            processedWord[j++] = c;
-        } else if (j > 0) {
-            processedWord[j] = '\0';
-            processWord(processedWord, root);
-            j = 0;
+            if (isalpha(c) || c == '\'' || (c == '-' && j > 0 && isalpha(processedWord[j-1]))) {
+                processedWord[j++] = c;
+            } else if (j > 0) {
+                processedWord[j] = '\0';
+                processWord(processedWord, root);
+                j = 0;
+            }
         }
     }
 
-    // Process the last word if there is one
     if (j > 0) {
         processedWord[j] = '\0';
         processWord(processedWord, root);
     }
 
+    free(buffer);
     free(processedWord);
-    fclose(file);
+    close(fd);
 }
 
-
 void processWord(char *word, Node **root) {
-    if (word[0] != '\0') { // Ensure the word is not empty
+    if (word[0] != '\0') {
         *root = insertNode(*root, word);
     }
 }
 
 void recursiveFind(char *dPath, Node **root) {
-    
-    // Opens current directory
     DIR *dir = opendir(dPath);
     if (dir == NULL) {    
         perror("Error opening directory");
         return;
-    } 
+    }
 
     struct dirent *currFile;
-    while((currFile = readdir(dir)) != NULL) {
-        // Checks if directory name is to deeper or higher and ignores this directory entry
+    struct stat fileStat;
+
+    while ((currFile = readdir(dir)) != NULL) {
         if (strcmp(currFile->d_name, ".") == 0 || strcmp(currFile->d_name, "..") == 0) {
             continue;
         }
 
-        // Constructs full directory path
-        char path[4096];// I wanted to use PATH_MAX to keep it more robust but its not working so we're just going to use 4096 
-        snprintf(path, sizeof(path), "%s/%s", dPath, currFile->d_name);
+        // Dynamically allocate memory for the path
+        size_t dPathLen = strlen(dPath);
+        size_t fileNameLen = strlen(currFile->d_name);
+        size_t pathLen = dPathLen + fileNameLen + 2;  // +2 for the slash and null terminator
+        char *path = malloc(pathLen);
+        if (path == NULL) {
+            perror("Unable to allocate memory for path");
+            continue;
+        }
 
-        // Check if current file is a txt file
+        // Construct the path
+        strcpy(path, dPath);
+        path[dPathLen] = '/';
+        strcpy(path + dPathLen + 1, currFile->d_name);
+
+        // Process the path
         if (stat(path, &fileStat) == 0) {
             if (S_ISDIR(fileStat.st_mode)) {
-                printf("%s is a directory.\n", currFile->d_name);
+                // Output and recursive call
                 recursiveFind(path, root);
             } else if (strstr(currFile->d_name, ".txt") != NULL) {
                 fileReader(path, root);
@@ -103,6 +114,9 @@ void recursiveFind(char *dPath, Node **root) {
         } else {
             perror("stat");
         }
+
+        // Free the dynamically allocated memory
+        free(path);
     }
     
     if (closedir(dir) < 0) {
@@ -111,30 +125,72 @@ void recursiveFind(char *dPath, Node **root) {
 }
 void findTextFiles(int argc, char *argv[], Node **root) {
     --argc;  // Skip the program's own name
+    struct stat fileStat;
+
     while (argc > 0) {
-        // Check if current file is a txt file or a directory
         if (stat(argv[argc], &fileStat) == 0) {
+            char *message;
+            size_t messageLen;
+
             if (S_ISDIR(fileStat.st_mode)) {
-                printf("%s is a directory.\n", argv[argc]);
+                const char *dirMsg = " is a directory.\n";
+                messageLen = strlen(argv[argc]) + strlen(dirMsg) + 1;
+                message = (char *)malloc(messageLen);
+
+                if (message) {
+                    strcpy(message, argv[argc]);
+                    strcat(message, dirMsg);
+                    write(STDOUT_FILENO, message, strlen(message));
+                    free(message);
+                }
+                
                 recursiveFind(argv[argc], root);
             } else if (strstr(argv[argc], ".txt") != NULL) {
                 fileReader(argv[argc], root);
             } else {
-                printf("%s is not a .txt file.\n", argv[argc]);
+                const char *notTxtMsg = " is not a .txt file.\n";
+                messageLen = strlen(argv[argc]) + strlen(notTxtMsg) + 1;
+                message = (char *)malloc(messageLen);
+
+                if (message) {
+                    strcpy(message, argv[argc]);
+                    strcat(message, notTxtMsg);
+                    write(STDOUT_FILENO, message, strlen(message));
+                    free(message);
+                }
             }
         } else {
-            perror("stat");
+            const char errMsg[] = "Error in stat\n";
+            write(STDERR_FILENO, errMsg, sizeof(errMsg) - 1);
         }
         --argc;
     }
 }
+void printNumber(int num, char *buffer, int *index) {
+    if (num == 0) {
+        buffer[(*index)++] = '0';
+        return;
+    }
 
+    int start = *index;
+    while (num != 0) {
+        buffer[(*index)++] = '0' + (num % 10);
+        num /= 10;
+    }
+    // Reverse the number in the buffer
+    for (int i = start, j = *index - 1; i < j; i++, j--) {
+        char temp = buffer[i];
+        buffer[i] = buffer[j];
+        buffer[j] = temp;
+    }
+}
 int main(int argc, char *argv[]) {
-      Node *root = NULL;
+    Node *root = NULL;
 
     // Checks whether user provided any files on runtime
     if (argc < 2) {
-        printf("No files provided.\n");
+        const char noFilesMsg[] = "No files provided.\n";
+        write(STDERR_FILENO, noFilesMsg, sizeof(noFilesMsg) - 1);
     } else {
         // Process files and directories
         findTextFiles(argc, argv, &root);
@@ -143,9 +199,9 @@ int main(int argc, char *argv[]) {
     // Count the total number of unique words
     int totalWords = countNodes(root);  
     WordCount *wordCounts = malloc(totalWords * sizeof(WordCount));
-
     if (wordCounts == NULL) {
-        perror("Unable to allocate memory for word counts");
+        const char allocErrMsg[] = "Unable to allocate memory for word counts\n";
+        write(STDERR_FILENO, allocErrMsg, sizeof(allocErrMsg) - 1);
         return 1;
     }
 
@@ -158,7 +214,21 @@ int main(int argc, char *argv[]) {
 
     // Print the sorted words and their counts
     for (int i = 0; i < totalWords; i++) {
-        printf("%s: %d\n", wordCounts[i].word, wordCounts[i].count);
+        int bufferSize = strlen(wordCounts[i].word) + 20; // Extra space for count and formatting
+        char *outputBuffer = malloc(bufferSize);
+        if (!outputBuffer) {
+            continue; // Or handle memory allocation error
+        }
+
+        strcpy(outputBuffer, wordCounts[i].word);
+        int bufferIndex = strlen(outputBuffer);
+        outputBuffer[bufferIndex++] = ':';
+        outputBuffer[bufferIndex++] = ' ';
+        printNumber(wordCounts[i].count, outputBuffer, &bufferIndex);
+        outputBuffer[bufferIndex++] = '\n';
+        write(STDOUT_FILENO, outputBuffer, bufferIndex);
+
+        free(outputBuffer);
         free(wordCounts[i].word); // Free the duplicated word
     }
 
